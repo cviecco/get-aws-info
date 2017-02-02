@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -33,7 +35,8 @@ type AWSConfigFile struct {
 }
 
 var (
-	debug = flag.Bool("debug", false, "Enable debug mode.")
+	debug         = flag.Bool("debug", false, "Enable debug mode.")
+	timeoutString = flag.String("httptimeout", "4s", "Duration of the http client timeouts")
 )
 
 func getRegionString() (string, error) {
@@ -52,13 +55,20 @@ func getAccountIdInstanceId() (string, string, error) {
 }
 
 func getTag(requestedTagName string, regionString string, credentials *credentials.Credentials) (string, error) {
-	//svc := ec2.New(mySession, aws.NewConfig().WithRegion("us-west-2"))
 	_, instanceID, err := getAccountIdInstanceId()
 	if err != nil {
 		return "", err
 	}
 
-	svc := ec2.New(session.New(&aws.Config{Region: aws.String(regionString), Credentials: credentials}))
+	//timeout := time.Duration(5 * time.Second)
+	timeout, err := time.ParseDuration(*timeoutString)
+	if err != nil {
+		return "", err
+	}
+
+	svc := ec2.New(session.New(&aws.Config{Region: aws.String(regionString),
+		Credentials: credentials,
+		HTTPClient:  &http.Client{Timeout: timeout}}))
 
 	describeTagsparams := &ec2.DescribeTagsInput{
 		//DryRun: aws.Bool(true),
