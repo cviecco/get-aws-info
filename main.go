@@ -35,6 +35,7 @@ type AWSConfigFile struct {
 }
 
 var (
+	Version       = "No version provided"
 	debug         = flag.Bool("debug", false, "Enable debug mode.")
 	timeoutString = flag.String("httptimeout", "4s", "Duration of the http client timeouts")
 )
@@ -118,9 +119,15 @@ func getTag(requestedTagName string, regionString string, credentials *credentia
 	return "", nil
 }
 
+func Usage() {
+	fmt.Fprintf(os.Stderr, "Usage of %s (version %s):\n", os.Args[0], Version)
+	flag.PrintDefaults()
+}
+
 func main() {
 	var configFilename = flag.String("config", "credentials.yml", "credentials file")
 	var tagName = flag.String("tagname", "Name", "Name of the tag of interest")
+	flag.Usage = Usage
 	flag.Parse()
 
 	var config AWSConfigFile
