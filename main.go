@@ -3,16 +3,34 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
-	//"os"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
-	//"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
+
+/*
+credentials:
+    - account_id: "6865596DDDD"
+      access_key_id: "AKIAIQCPR"
+      secret_access_key: "AKIAIQC"
+*/
+
+type awsCredentialsConfig struct {
+	Account_id        string
+	Access_Key_ID     string
+	Secret_Access_Key string
+}
+
+type AWSConfigFile struct {
+	Credentials []awsCredentialsConfig
+}
 
 var (
 	debug = flag.Bool("debug", false, "Enable debug mode.")
@@ -24,23 +42,23 @@ func getRegionString() (string, error) {
 	return region, err
 }
 
-func getInstanceId() (string, error) {
+func getAccountIdInstanceId() (string, string, error) {
 	svc := ec2metadata.New(session.New())
 	identityDocument, err := svc.GetInstanceIdentityDocument()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return identityDocument.InstanceID, nil
+	return identityDocument.AccountID, identityDocument.InstanceID, nil
 }
 
 func getTag(requestedTagName string, regionString string, credentials *credentials.Credentials) (string, error) {
 	//svc := ec2.New(mySession, aws.NewConfig().WithRegion("us-west-2"))
-	instanceID, err := getInstanceId()
+	_, instanceID, err := getAccountIdInstanceId()
 	if err != nil {
 		return "", err
 	}
 
-	svc := ec2.New(session.New(&aws.Config{Region: aws.String(regionString)}))
+	svc := ec2.New(session.New(&aws.Config{Region: aws.String(regionString), Credentials: credentials}))
 
 	describeTagsparams := &ec2.DescribeTagsInput{
 		//DryRun: aws.Bool(true),
@@ -91,18 +109,50 @@ func getTag(requestedTagName string, regionString string, credentials *credentia
 }
 
 func main() {
-	//var credentialsFilePath = flag.String("credentials", "credentials.yml", "credentials file")
+	var configFilename = flag.String("config", "credentials.yml", "credentials file")
 	var tagName = flag.String("tagname", "Name", "Name of the tag of interest")
 	flag.Parse()
+
+	var config AWSConfigFile
+	if *debug {
+		log.Printf("using config=%s\n", *configFilename)
+	}
+	source, err := ioutil.ReadFile(*configFilename)
+	if err != nil {
+		log.Printf("Cannot read config file: %s. Err=%s\n", *configFilename, err.Error())
+		os.Exit(1)
+	}
+	err = yaml.Unmarshal(source, &config)
+	if err != nil {
+		log.Printf("Cannot parse config file: %s. Err=%s\n", *configFilename, err.Error())
+		os.Exit(1)
+	}
+	if *debug {
+		fmt.Printf("%+v\n", config)
+	}
+
+	var creds *credentials.Credentials
+
+	accountID, _, err := getAccountIdInstanceId()
+	if err != nil {
+		log.Fatalf("Cannot get accountID, %s", err)
+	}
+
+	for _, account := range config.Credentials {
+		if account.Account_id == accountID {
+			if *debug {
+				log.Printf("%+v\n", account)
+			}
+			creds = credentials.NewStaticCredentials(account.Access_Key_ID, account.Secret_Access_Key, "")
+		}
+	}
 
 	regionString, err := getRegionString()
 	if err != nil {
 		log.Fatalf("Cannot get Region string %s", err)
 	}
 
-	//creds := credentials.NewStatic
-
-	value, err := getTag(*tagName, regionString, nil)
+	value, err := getTag(*tagName, regionString, creds)
 	if err != nil {
 		log.Fatalf("Cannot get Tag Name %s", err)
 	}
