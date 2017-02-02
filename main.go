@@ -7,12 +7,16 @@ import (
 	//"os"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	//"gopkg.in/yaml.v2"
 )
 
-var debug = false
+var (
+	debug = flag.Bool("debug", false, "Enable debug mode.")
+)
 
 func getRegionString() (string, error) {
 	svc := ec2metadata.New(session.New())
@@ -29,7 +33,7 @@ func getInstanceId() (string, error) {
 	return identityDocument.InstanceID, nil
 }
 
-func getTag(requestedTagName string, regionString string) (string, error) {
+func getTag(requestedTagName string, regionString string, credentials *credentials.Credentials) (string, error) {
 	//svc := ec2.New(mySession, aws.NewConfig().WithRegion("us-west-2"))
 	instanceID, err := getInstanceId()
 	if err != nil {
@@ -71,12 +75,14 @@ func getTag(requestedTagName string, regionString string) (string, error) {
 	}
 
 	// Pretty-print the response data.
-	if debug {
+	if *debug {
 		fmt.Println(resp2)
 	}
 	for _, tag := range resp2.Tags {
 		if *tag.Key == requestedTagName {
-			log.Printf("found %s: %s\n", *tag.Key, *tag.Value)
+			if *debug {
+				log.Printf("found %s: %s\n", *tag.Key, *tag.Value)
+			}
 			return *tag.Value, nil
 		}
 	}
@@ -93,7 +99,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Cannot get Region string %s", err)
 	}
-	value, err := getTag(*tagName, regionString)
+
+	//creds := credentials.NewStatic
+
+	value, err := getTag(*tagName, regionString, nil)
 	if err != nil {
 		log.Fatalf("Cannot get Tag Name %s", err)
 	}
